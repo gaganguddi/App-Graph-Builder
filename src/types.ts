@@ -10,7 +10,15 @@ export type AppSummary = {
 export type ServiceStatus = "success" | "warning" | "error";
 
 export type ServiceNodeData = {
-  icon: "postgres" | "redis" | "mongo" | "api" | "worker";
+  icon:
+    | "postgres"
+    | "redis"
+    | "mongo"
+    | "api"
+    | "worker"
+    | "github"
+    | "docker"
+    | "kubernetes";
   name: string;
   status: ServiceStatus;
   cpu: number;

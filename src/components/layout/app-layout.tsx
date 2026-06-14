@@ -7,12 +7,14 @@ import { Topbar } from "./topbar";
 import { GraphCanvas } from "@/components/graph/graph-canvas";
 import { getAppGraph, getApps } from "@/mocks/mock-api";
 import { useAppStore } from "@/store/app-store";
+import { cn } from "@/lib/utils";
 
 export function AppLayout() {
   const selectedAppId = useAppStore((state) => state.selectedAppId);
   const setSelectedAppId = useAppStore((state) => state.setSelectedAppId);
   const setGraph = useAppStore((state) => state.setGraph);
   const setSelectedNodeId = useAppStore((state) => state.setSelectedNodeId);
+  const theme = useAppStore((state) => state.theme);
 
   const appsQuery = useQuery({
     queryKey: ["apps"],
@@ -38,7 +40,12 @@ export function AppLayout() {
   }, [graphQuery.data, setGraph]);
 
   return (
-    <div className="flex h-screen w-screen overflow-hidden bg-[#020617] text-white">
+    <div className={cn(
+      "flex h-screen w-screen overflow-hidden transition-colors duration-300",
+      theme === "light"
+        ? "bg-slate-50 text-slate-900"
+        : "bg-[#020617] text-white"
+    )}>
       <LeftRail
         apps={appsQuery.data?.apps ?? []}
         isLoading={appsQuery.isLoading}
@@ -54,13 +61,23 @@ export function AppLayout() {
             onClick={() => setSelectedNodeId(null)}
           >
             {graphQuery.isLoading && (
-              <div className="absolute left-1/2 top-10 z-20 -translate-x-1/2 rounded-md border border-white/10 bg-black/70 px-4 py-2 text-sm text-white/70 backdrop-blur">
+              <div className={cn(
+                "absolute left-1/2 top-10 z-20 -translate-x-1/2 rounded-md border px-4 py-2 text-sm backdrop-blur transition-colors duration-300",
+                theme === "light"
+                  ? "border-slate-300 bg-slate-200 text-slate-700"
+                  : "border-white/10 bg-black/70 text-white/70"
+              )}>
                 Loading graph...
               </div>
             )}
 
             {graphQuery.error && (
-              <div className="absolute left-1/2 top-10 z-20 -translate-x-1/2 rounded-md border border-red-400/30 bg-red-950/80 px-4 py-2 text-sm text-red-100 backdrop-blur">
+              <div className={cn(
+                "absolute left-1/2 top-10 z-20 -translate-x-1/2 rounded-md border px-4 py-2 text-sm backdrop-blur transition-colors duration-300",
+                theme === "light"
+                  ? "border-red-300 bg-red-100 text-red-700"
+                  : "border-red-400/30 bg-red-950/80 text-red-100"
+              )}>
                 Unable to load graph.
               </div>
             )}

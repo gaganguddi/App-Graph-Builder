@@ -1,19 +1,23 @@
+import { useState, type ReactNode } from "react";
 import {
   Box,
-  Code2,
   Database,
-  Globe,
   HelpCircle,
   LayoutDashboard,
   LineChart,
+  Network,
   Plus,
   Rocket,
   Search,
   Settings,
   Sparkles,
   Workflow,
+  ChevronLeft,
+  ChevronRight,
 } from "lucide-react";
 
+import { AddNodeDialog } from "@/components/graph/add-node-dialog";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import type { AppSummary } from "@/types";
 import { useAppStore } from "@/store/app-store";
 import { cn } from "@/lib/utils";
@@ -38,147 +42,353 @@ const navItems = [
   { id: "settings", label: "Settings", icon: Settings },
 ] as const;
 
+const sectionCopy: Record<string, { eyebrow: string; title: string; blurb: string }> = {
+  applications: {
+    eyebrow: "Workspace",
+    title: "Applications",
+    blurb: "Switch between your deployed services and app views.",
+  },
+  services: {
+    eyebrow: "Orchestration",
+    title: "Services",
+    blurb: "Inspect service flows, dependencies, and delivery lanes.",
+  },
+  databases: {
+    eyebrow: "Data layer",
+    title: "Databases",
+    blurb: "Manage core data stores and database connections.",
+  },
+  monitoring: {
+    eyebrow: "Observability",
+    title: "Monitoring",
+    blurb: "Track performance, health, and incident signals.",
+  },
+  settings: {
+    eyebrow: "Control center",
+    title: "Settings",
+    blurb: "Configure workspace preferences, roles, and integrations.",
+  },
+};
+
+function RailIconButton({
+  label,
+  isActive,
+  showTooltip,
+  onClick,
+  children,
+  className,
+}: {
+  label: string;
+  isActive?: boolean;
+  showTooltip: boolean;
+  onClick?: () => void;
+  children: ReactNode;
+  className?: string;
+}) {
+  const theme = useAppStore((state) => state.theme);
+
+  const button = (
+    <button
+      className={cn(
+        "group relative grid size-11 place-items-center rounded-md border border-transparent transition duration-200 hover:-translate-y-0.5",
+        className ?? "mb-4",
+        theme === "light"
+          ? "text-slate-600 hover:border-slate-300 hover:bg-white/80 hover:text-slate-900 hover:shadow-[0_0_16px_rgba(100,116,139,0.12)]"
+          : "text-white/70 hover:border-white/10 hover:bg-white/[0.07] hover:text-white hover:shadow-[0_0_22px_rgba(56,189,248,0.18)]",
+        isActive &&
+          "border-cyan-300/30 bg-indigo-500 text-white shadow-[0_0_26px_rgba(99,102,241,0.45)]",
+      )}
+      onClick={onClick}
+      type="button"
+    >
+      {children}
+      {isActive && (
+        <span
+          className={cn(
+            "absolute -right-[17px] h-7 w-1 rounded-l-full shadow-[0_0_16px_rgba(34,211,238,0.75)]",
+            theme === "light" ? "bg-cyan-400" : "bg-cyan-300",
+          )}
+        />
+      )}
+    </button>
+  );
+
+  if (!showTooltip) {
+    return button;
+  }
+
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>{button}</TooltipTrigger>
+      <TooltipContent side="right">{label}</TooltipContent>
+    </Tooltip>
+  );
+}
+
 export function LeftRail({ apps, isLoading, error }: Props) {
   const selectedAppId = useAppStore((state) => state.selectedAppId);
   const setSelectedAppId = useAppStore((state) => state.setSelectedAppId);
-  const activeSection = useAppStore((state) => state.activeSection);
-  const setActiveSection = useAppStore((state) => state.setActiveSection);
+  const activeSidebarSection = useAppStore((state) => state.activeSidebarSection);
+  const selectSidebarSection = useAppStore((state) => state.selectSidebarSection);
+  const theme = useAppStore((state) => state.theme);
+  const isSidebarExpanded = useAppStore((state) => state.isSidebarExpanded);
+  const toggleSidebar = useAppStore((state) => state.toggleSidebar);
+  const [isAddNodeOpen, setIsAddNodeOpen] = useState(false);
+
+  const showTooltips = !isSidebarExpanded;
 
   return (
-    <aside className="flex min-h-0 shrink-0 border-r border-white/10 bg-[#05070d]/95">
-      <div className="hidden w-[72px] flex-col items-center border-r border-white/10 py-5 md:flex">
+    <>
+    <aside className={cn(
+      "flex min-h-0 shrink-0 border-r backdrop-blur-xl transition-all duration-300",
+      theme === "light"
+        ? "border-slate-200/80 bg-slate-50/90"
+        : "border-white/10 bg-[#05070d]/95"
+    )}>
+      <div className={cn(
+        "hidden md:flex flex-col items-center border-r py-5 transition-all duration-300",
+        theme === "light"
+          ? "border-slate-200/80 bg-slate-100/70"
+          : "border-white/10 bg-[#05070d]/50"
+      )}>
         {navItems.slice(0, 4).map((item) => {
-          const isActive = activeSection === item.id;
+          const isActive = activeSidebarSection === item.id;
           const Icon = item.icon;
 
           return (
-          <button
-            className={cn(
-              "group relative mb-4 grid size-11 place-items-center rounded-md border border-transparent text-white/70 transition duration-200 hover:-translate-y-0.5 hover:border-white/10 hover:bg-white/[0.07] hover:text-white hover:shadow-[0_0_22px_rgba(56,189,248,0.18)]",
-              isActive &&
-                "border-cyan-300/30 bg-indigo-500 text-white shadow-[0_0_26px_rgba(99,102,241,0.45)]",
-            )}
-            key={item.id}
-            onClick={() => setActiveSection(item.id)}
-            title={item.label}
-            type="button"
-          >
-            <Icon size={20} />
-            {isActive && (
-              <span className="absolute -right-[17px] h-7 w-1 rounded-l-full bg-cyan-300 shadow-[0_0_16px_rgba(34,211,238,0.75)]" />
-            )}
-          </button>
+            <RailIconButton
+              isActive={isActive}
+              key={item.id}
+              label={item.label}
+              onClick={() => selectSidebarSection(item.id)}
+              showTooltip={showTooltips}
+            >
+              <Icon size={20} />
+            </RailIconButton>
           );
         })}
 
         <div className="mt-auto space-y-3">
-          <button
-            className={cn(
-              "grid size-11 place-items-center rounded-md border border-transparent text-white/70 transition hover:-translate-y-0.5 hover:border-white/10 hover:bg-white/[0.07] hover:text-white",
-              activeSection === "settings" &&
-                "border-cyan-300/30 bg-indigo-500 text-white shadow-[0_0_26px_rgba(99,102,241,0.45)]",
-            )}
-            onClick={() => setActiveSection("settings")}
-            title="Settings"
-            type="button"
+          <RailIconButton
+            isActive={activeSidebarSection === "settings"}
+            label="Settings"
+            onClick={() => selectSidebarSection("settings")}
+            showTooltip={showTooltips}
           >
             <Settings size={20} />
-          </button>
+          </RailIconButton>
 
-          <button className="grid size-11 place-items-center rounded-md text-white/75 transition hover:bg-white/[0.06] hover:text-white" type="button">
+          <RailIconButton label="Help" onClick={() => undefined} showTooltip={showTooltips}>
             <HelpCircle size={20} />
-          </button>
+          </RailIconButton>
+
+          <RailIconButton
+            label={isSidebarExpanded ? "Collapse sidebar" : "Expand sidebar"}
+            onClick={toggleSidebar}
+            showTooltip={showTooltips}
+          >
+            {isSidebarExpanded ? <ChevronLeft size={20} /> : <ChevronRight size={20} />}
+          </RailIconButton>
         </div>
       </div>
 
-      <div className="hidden w-[306px] min-h-0 flex-col bg-[linear-gradient(180deg,rgba(9,13,22,0.96),rgba(5,7,13,0.98))] xl:flex">
-        <div className="border-b border-white/10 p-5">
-          <div className="mb-4 flex items-center justify-between">
-            <h2 className="text-xl font-semibold">
-              {navItems.find((item) => item.id === activeSection)?.label}
+      <div className={cn(
+        "hidden xl:flex min-h-0 flex-col overflow-hidden transition-all duration-300 ease-in-out",
+        isSidebarExpanded
+          ? "w-[280px] opacity-100 pointer-events-auto"
+          : "w-0 opacity-0 pointer-events-none"
+      )}>
+        <div className={cn(
+          "border-b p-6 transition-colors duration-300 shrink-0",
+          theme === "light"
+            ? "border-slate-200/80 bg-white/60"
+            : "border-white/10 bg-black/20"
+        )}>
+          <div className="mb-5 flex items-center justify-between gap-4">
+            <h2 className={cn(
+              "text-xl font-semibold",
+              theme === "light" ? "text-slate-900" : "text-white"
+            )}>
+              {navItems.find((item) => item.id === activeSidebarSection)?.label}
             </h2>
-            <button className="grid size-9 place-items-center rounded-md bg-indigo-500 text-white shadow-[0_0_24px_rgba(99,102,241,0.3)]" type="button">
+            <button
+              className="grid size-9 place-items-center rounded-md bg-indigo-500 text-white shadow-[0_0_24px_rgba(99,102,241,0.3)] transition hover:bg-indigo-600"
+              onClick={() => setIsAddNodeOpen(true)}
+              title="Add service node"
+              type="button"
+            >
               <Plus size={19} />
             </button>
           </div>
 
-          <label className="flex h-10 items-center gap-2 rounded-md border border-white/10 bg-black/20 px-3 text-sm text-white/40">
-            <Search size={16} />
-            <input
-              className="min-w-0 flex-1 bg-transparent text-white outline-none placeholder:text-white/40"
-              placeholder="Search applications..."
-            />
-          </label>
-        </div>
-
-        <div className="min-h-0 flex-1 overflow-y-auto p-5">
-          <div className="space-y-2">
-            {isLoading && (
-              <p className="rounded-md border border-white/10 bg-white/[0.03] p-3 text-sm text-white/50">
-                Loading applications...
-              </p>
-            )}
-
-            {error && (
-              <p className="rounded-md border border-red-400/30 bg-red-950/30 p-3 text-sm text-red-100">
-                Unable to load apps.
-              </p>
-            )}
-
-            {apps.map((app) => (
-              <button
+          {activeSidebarSection === "applications" && (
+            <label className={cn(
+              "flex h-10 items-center gap-2 rounded-md border px-3 text-sm transition-colors duration-300",
+              theme === "light"
+                ? "border-slate-300 bg-slate-200 text-slate-500 placeholder:text-slate-400"
+                : "border-white/10 bg-black/20 text-white/40 placeholder:text-white/40"
+            )}>
+              <Search size={16} />
+              <input
                 className={cn(
-                  "flex w-full items-center gap-3 rounded-md border border-transparent px-2 py-2 text-left text-sm font-semibold text-white/85 transition duration-200 hover:border-white/10 hover:bg-white/[0.05] hover:text-white",
-                  selectedAppId === app.id &&
-                    "border-cyan-300/20 bg-cyan-400/[0.06] text-white shadow-[inset_0_0_18px_rgba(34,211,238,0.06)]",
+                  "min-w-0 flex-1 bg-transparent outline-none",
+                  theme === "light"
+                    ? "text-slate-700 placeholder:text-slate-500"
+                    : "text-white placeholder:text-white/40"
                 )}
-                key={app.id}
-                onClick={() => {
-                  setActiveSection("applications");
-                  setSelectedAppId(app.id);
-                }}
-                type="button"
-              >
-                <span className="grid size-9 shrink-0 place-items-center rounded-md bg-gradient-to-br from-indigo-500 to-blue-500 text-white">
-                  <Rocket size={17} />
-                </span>
-                <span className="min-w-0 flex-1 truncate">{app.name}</span>
-              </button>
-            ))}
-          </div>
-
-          <div className="mt-6">
-            <p className="mb-3 text-xs font-semibold uppercase tracking-normal text-white/40">
-              Data Stores
-            </p>
-
-            <div className="space-y-2">
-              {services.map((service) => (
-                <button
-                  className="flex w-full items-center gap-3 rounded-md border border-transparent px-2 py-1.5 text-left text-sm font-semibold text-white/85 transition hover:border-white/10 hover:bg-white/[0.05] hover:text-white"
-                  key={service.name}
-                  onClick={() => setActiveSection("databases")}
-                  type="button"
-                >
-                  <span className={cn("grid size-9 place-items-center rounded-md bg-gradient-to-br", service.color)}>
-                    <service.icon size={17} />
-                  </span>
-                  {service.name}
-                </button>
-              ))}
-            </div>
-          </div>
+                placeholder="Search applications..."
+              />
+            </label>
+          )}
         </div>
 
-        <div className="m-5 grid min-h-[142px] place-items-center rounded-md border border-dashed border-white/25 bg-white/[0.02] p-5 text-center text-sm text-white/50">
-          <div>
-            <Box className="mx-auto mb-3 size-9 text-white/60" />
-            Drag a service to
-            <br />
-            add to your graph
+        <div className="min-h-0 flex-1 overflow-y-auto p-6 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
+          <div className={cn("mb-6 rounded-md border p-4 transition-all duration-300", theme === "light" ? "border-slate-200/90 bg-slate-100/90 text-slate-700" : "border-white/10 bg-white/[0.045] text-white/80")}> 
+            <p className={cn("text-[11px] uppercase tracking-[0.2em]", theme === "light" ? "text-slate-500" : "text-white/45")}>{sectionCopy[activeSidebarSection]?.eyebrow}</p>
+            <h3 className={cn("mt-1 text-sm font-semibold", theme === "light" ? "text-slate-900" : "text-white")}>{sectionCopy[activeSidebarSection]?.title}</h3>
+            <p className={cn("mt-2 text-xs leading-5", theme === "light" ? "text-slate-600" : "text-white/55")}>{sectionCopy[activeSidebarSection]?.blurb}</p>
+          </div>
+
+          {activeSidebarSection === "applications" && (
+            <>
+              <div className="space-y-2.5">
+                {isLoading && (
+                  <p className={cn(
+                    "rounded-md border p-3 text-sm transition-colors duration-300",
+                    theme === "light"
+                      ? "border-slate-300 bg-slate-200 text-slate-600"
+                      : "border-white/10 bg-white/[0.03] text-white/50"
+                  )}>
+                    Loading applications...
+                  </p>
+                )}
+
+                {error && (
+                  <p className={cn(
+                    "rounded-md border p-3 text-sm transition-colors duration-300",
+                    theme === "light"
+                      ? "border-red-300 bg-red-100 text-red-700"
+                      : "border-red-400/30 bg-red-950/30 text-red-100"
+                  )}>
+                    Unable to load apps.
+                  </p>
+                )}
+
+                {apps.map((app) => (
+                  <button
+                    className={cn(
+                      "flex w-full items-center gap-3.5 rounded-md border border-transparent px-3 py-2.5 text-left text-sm font-semibold transition duration-200",
+                      theme === "light"
+                        ? "text-slate-700 hover:border-slate-300/90 hover:bg-slate-200/90 hover:text-slate-900 hover:shadow-sm"
+                        : "text-white/85 hover:border-white/10 hover:bg-white/[0.055] hover:text-white hover:shadow-[inset_0_1px_0_rgba(255,255,255,0.03)]",
+                      selectedAppId === app.id &&
+                        (theme === "light"
+                          ? "border-blue-300 bg-blue-100 text-blue-900 shadow-[inset_0_0_18px_rgba(59,130,246,0.1)]"
+                          : "border-cyan-300/20 bg-cyan-400/[0.06] text-white shadow-[inset_0_0_18px_rgba(34,211,238,0.06)]"),
+                    )}
+                    key={app.id}
+                    onClick={() => {
+                      selectSidebarSection("applications");
+                      setSelectedAppId(app.id);
+                    }}
+                    type="button"
+                  >
+                    <span className="grid size-10 shrink-0 place-items-center rounded-md bg-gradient-to-br from-indigo-500 to-blue-500 text-white shadow-[0_8px_18px_rgba(79,70,229,0.22)]">
+                      <Rocket size={17} />
+                    </span>
+                    <span className="min-w-0 flex-1 truncate">{app.name}</span>
+                  </button>
+                ))}
+              </div>
+
+              <div className="mt-6">
+                <p className={cn(
+                  "mb-3 text-xs font-semibold uppercase tracking-normal transition-colors duration-300",
+                  theme === "light"
+                    ? "text-slate-500"
+                    : "text-white/40"
+                )}>
+                  Data Stores
+                </p>
+
+                <div className="space-y-2.5">
+                  {services.map((service) => (
+                    <button
+                      className={cn(
+                        "flex w-full items-center gap-3.5 rounded-md border border-transparent px-3 py-2 text-left text-sm font-semibold transition",
+                        theme === "light"
+                          ? "text-slate-700 hover:border-slate-300/90 hover:bg-slate-200/90 hover:text-slate-900 hover:shadow-sm"
+                          : "text-white/85 hover:border-white/10 hover:bg-white/[0.055] hover:text-white"
+                      )}
+                      key={service.name}
+                      onClick={() => selectSidebarSection("databases")}
+                      type="button"
+                    >
+                      <span className={cn("grid size-10 shrink-0 place-items-center rounded-md bg-gradient-to-br shadow-[0_8px_18px_rgba(15,23,42,0.18)]", service.color)}>
+                        <service.icon size={17} />
+                      </span>
+                      <span className="min-w-0 flex-1 truncate">{service.name}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </>
+          )}
+
+          {activeSidebarSection !== "applications" && (
+            <div className={cn("rounded-md border p-4 text-sm", theme === "light" ? "border-slate-200 bg-slate-100/90 text-slate-700" : "border-white/10 bg-white/[0.04] text-white/75")}> 
+              {activeSidebarSection === "services" && "Service orchestration views and pipeline health will appear here."}
+              {activeSidebarSection === "databases" && "Database connections, replicas, and storage health will appear here."}
+              {activeSidebarSection === "monitoring" && "Monitoring charts, alerts, and incidents will appear here."}
+              {activeSidebarSection === "settings" && "Workspace preferences and account controls will appear here."}
+            </div>
+          )}
+        </div>
+
+        <div
+          className={cn(
+            "m-6 shrink-0 rounded-xl border border-dashed p-5 text-center text-sm backdrop-blur-xl transition-all duration-300 hover:-translate-y-0.5",
+            theme === "light"
+              ? "border-slate-300/70 bg-gradient-to-b from-white/85 to-slate-100/75 text-slate-600 shadow-[inset_0_1px_0_rgba(255,255,255,0.9),0_12px_32px_rgba(99,102,241,0.08)] hover:border-indigo-300/70 hover:shadow-[inset_0_1px_0_rgba(255,255,255,0.95),0_16px_38px_rgba(99,102,241,0.12)]"
+              : "border-white/15 bg-white/[0.025] text-white/55 shadow-[inset_0_1px_0_rgba(255,255,255,0.04),0_0_30px_rgba(56,189,248,0.08)] hover:border-cyan-200/25 hover:bg-white/[0.035] hover:shadow-[inset_0_1px_0_rgba(255,255,255,0.06),0_0_38px_rgba(56,189,248,0.12)]",
+          )}
+        >
+          <div className="grid min-h-[138px] place-items-center">
+            <div>
+              <div
+                className={cn(
+                  "relative mx-auto mb-5 grid size-14 place-items-center rounded-xl border",
+                  theme === "light"
+                    ? "border-indigo-200/70 bg-white shadow-[0_10px_28px_rgba(99,102,241,0.18)]"
+                    : "border-cyan-200/15 bg-white/[0.045] shadow-[0_0_30px_rgba(56,189,248,0.16)]",
+                )}
+              >
+                <Network
+                  className={cn(
+                    "size-7",
+                    theme === "light" ? "text-indigo-500" : "text-cyan-300",
+                  )}
+                />
+                <span
+                  className={cn(
+                    "absolute -inset-2 -z-10 rounded-xl blur-2xl",
+                    theme === "light" ? "bg-indigo-300/45" : "bg-cyan-400/16",
+                  )}
+                />
+              </div>
+              <p className={cn("font-semibold leading-5", theme === "light" ? "text-slate-700" : "text-white/78")}>
+                Build your infrastructure graph
+              </p>
+              <p className={cn("mt-2 text-xs leading-5", theme === "light" ? "text-slate-500" : "text-white/45")}>
+                Click <span className="font-semibold">+</span> to add a service node
+              </p>
+            </div>
           </div>
         </div>
       </div>
     </aside>
+
+    <AddNodeDialog open={isAddNodeOpen} onOpenChange={setIsAddNodeOpen} />
+    </>
   );
 }
