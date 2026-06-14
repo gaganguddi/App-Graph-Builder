@@ -31,6 +31,7 @@ https://app-graph-builder-one.vercel.app/
 ![App Graph Builder dashboard reference](docs/assets/new_node.png)
 ![App Graph Builder dashboard reference](docs/assets/node_creation.png)
 ![App Graph Builder dashboard reference](docs/assets/Lightmode.png)
+![App Graph Builder dashboard reference](docs/assets/image.png)
 
 It demonstrates:
 
