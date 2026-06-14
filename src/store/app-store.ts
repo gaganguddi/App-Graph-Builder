@@ -46,6 +46,7 @@ type AppStore = {
   theme: "dark" | "light";
   sidebarCollapsed: boolean;
   isSidebarExpanded: boolean;
+  isMobileSidebarOpen: boolean;
   nodes: ServiceNode[];
   edges: Edge[];
 
@@ -60,6 +61,9 @@ type AppStore = {
   toggleSidebar: () => void;
   collapseSidebar: () => void;
   expandSidebar: () => void;
+  openMobileSidebar: () => void;
+  closeMobileSidebar: () => void;
+  toggleMobileSidebar: () => void;
   setGraph: (graph: GraphPayload) => void;
   addNode: (payload: AddNodePayload) => void;
   addStackNode: (payload: AddStackNodePayload) => void;
@@ -184,6 +188,7 @@ export const useAppStore = create<AppStore>((set) => ({
   theme: "dark",
   sidebarCollapsed: false,
   isSidebarExpanded: true,
+  isMobileSidebarOpen: false,
   nodes: [],
   edges: [],
 
@@ -274,6 +279,21 @@ export const useAppStore = create<AppStore>((set) => ({
       sidebarCollapsed: false,
       isSidebarExpanded: true,
     }),
+
+  openMobileSidebar: () =>
+    set({
+      isMobileSidebarOpen: true,
+    }),
+
+  closeMobileSidebar: () =>
+    set({
+      isMobileSidebarOpen: false,
+    }),
+
+  toggleMobileSidebar: () =>
+    set((state) => ({
+      isMobileSidebarOpen: !state.isMobileSidebarOpen,
+    })),
 
   setGraph: (graph) =>
     set({

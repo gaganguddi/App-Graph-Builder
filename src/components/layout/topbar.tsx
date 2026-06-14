@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Bell, Check, ChevronDown, Moon, Share2, Sun } from "lucide-react";
+import { Bell, Check, ChevronDown, Menu, Moon, Share2, Sun } from "lucide-react";
 
 import type { AppSummary } from "@/types";
 import { useAppStore } from "@/store/app-store";
@@ -14,6 +14,7 @@ export function Topbar({ apps }: Props) {
   const selectedApp = apps.find((app) => app.id === selectedAppId);
   const setSelectedAppId = useAppStore((state) => state.setSelectedAppId);
   const toggleTheme = useAppStore((state) => state.toggleTheme);
+  const toggleMobileSidebar = useAppStore((state) => state.toggleMobileSidebar);
   const theme = useAppStore((state) => state.theme);
   const [isAppMenuOpen, setIsAppMenuOpen] = useState(false);
   const appMenuRef = useRef<HTMLDivElement>(null);
@@ -42,6 +43,20 @@ export function Topbar({ apps }: Props) {
         : "border-white/10 bg-[#05070d]/95"
     )}>
       <div className="flex min-w-0 items-center gap-4 px-4 md:px-6">
+        <button
+          aria-label="Open sidebar navigation"
+          className={cn(
+            "grid size-10 shrink-0 place-items-center rounded-md border transition xl:hidden",
+            theme === "light"
+              ? "border-slate-300 bg-slate-50 text-slate-900 hover:bg-slate-100"
+              : "border-white/10 bg-white/[0.03] text-white hover:bg-white/[0.06]",
+          )}
+          onClick={toggleMobileSidebar}
+          type="button"
+        >
+          <Menu size={20} />
+        </button>
+
         <div className={cn(
           "grid h-10 w-10 place-items-center rounded-md border shadow-[0_0_30px_rgba(59,130,246,0.18)]",
           theme === "light"
