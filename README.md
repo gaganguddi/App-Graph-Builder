@@ -10,6 +10,10 @@ This project was built for a Frontend Intern Task focused on creating a polished
 
 The dashboard loads application data through real `fetch()` calls, intercepted in development by Mock Service Worker. TanStack Query handles API caching and refetching, Zustand owns graph interaction state, and ReactFlow renders the interactive canvas.
 
+## Live Demo
+
+https://app-graph-builder-one.vercel.app/
+
 ## Reference video link:
 (https://drive.google.com/file/d/10xIUeBSz7CL7FEAT-rekTcseWXZEAsV7/view?usp=sharing)
 
