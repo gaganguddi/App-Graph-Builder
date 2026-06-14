@@ -4,11 +4,17 @@ A futuristic infrastructure graph dashboard built with React, Vite, TypeScript, 
 
 The interface is inspired by Railway, Vercel, Supabase Studio, and Render. It visualizes application infrastructure as an interactive graph, lets users inspect and edit service nodes, switch between application graphs, and add new infrastructure stack nodes through drag and drop.
 
+## Live Demo
+
+https://app-graph-builder-one.vercel.app/
+
 ## Project Overview
 
 This project was built for a Frontend Intern Task focused on creating a polished infrastructure visualization experience with modern frontend architecture.
 
-The dashboard loads application data through real `fetch()` calls, intercepted in development by Mock Service Worker. TanStack Query handles API caching and refetching, Zustand owns graph interaction state, and ReactFlow renders the interactive canvas.
+The dashboard loads application and graph data through an environment-aware mock API layer. In development, Mock Service Worker intercepts real `fetch()` calls so the app behaves like it is talking to backend endpoints. In production, the same API functions return local Promise-based mock data so the deployed Vercel app does not depend on Service Worker APIs or a backend server.
+
+TanStack Query handles API caching and refetching, Zustand owns graph interaction state, and ReactFlow renders the interactive canvas.
 
 ## Live Demo
 
@@ -29,7 +35,7 @@ https://app-graph-builder-one.vercel.app/
 It demonstrates:
 
 - Graph-based infrastructure visualization
-- Mock API integration through MSW
+- Environment-aware mock API integration with MSW in development and local services in production
 - Stateful ReactFlow interactions
 - A production-style inspector workflow
 - Responsive SaaS dashboard layout
@@ -40,12 +46,14 @@ It demonstrates:
 
 - **ReactFlow graph visualization** for infrastructure services and dependencies.
 - **Dynamic graph rendering** based on the selected application.
-- **Application switching** from the sidebar and topbar selector.
+- **Dynamic app switching** from the sidebar and topbar selector.
 - **TanStack Query caching** for app and graph API responses.
-- **MSW mock APIs** for `/api/apps` and `/api/apps/:appId/graph`.
+- **MSW mock APIs in development** for `/api/apps` and `/api/apps/:appId/graph`.
+- **Production-safe mock API architecture** with local Promise-based fallback data for static hosting.
 - **Zustand global state** for selected app, selected node, graph nodes/edges, theme, sidebar state, and inspector tabs.
-- **Draggable infrastructure stack toolbar** inside the graph canvas as a premium bonus feature beyond the original assignment requirements.
+- **Floating draggable infrastructure stack toolbar** inside the graph canvas as a premium bonus feature beyond the original assignment requirements.
 - **Dynamic infrastructure node creation** by dragging technology stack icons directly onto the graph canvas.
+- **Dynamic infrastructure node generation** using shared service node data and Zustand graph mutations.
 - **Drag-and-drop stack creation** for PostgreSQL, Redis, MongoDB, Docker, Kubernetes, and GitHub.
 - **ReactFlow-aware drop positioning** so newly generated infrastructure nodes appear where the user drops them, even after zooming or panning.
 - **Zustand graph synchronization** so dropped nodes immediately join the same graph state as API-loaded nodes.
@@ -56,10 +64,12 @@ It demonstrates:
 - **Connected edge cleanup** when nodes are deleted.
 - **Graph zoom, pan, minimap, controls, and fit view** support.
 - **Dotted graph canvas** with theme-aware styling.
-- **Theme toggle** with persisted light/dark mode.
-- **Responsive layout** with mobile inspector overlay behavior and collapsible sidebar.
+- **Theme persistence** with stored light/dark mode.
+- **Responsive layout** with mobile inspector drawer/overlay behavior and collapsible sidebar.
 - **Premium splash/loading screen** before the dashboard fades in.
 - **Stable ReactFlow config** to avoid nodeTypes/edgeTypes recreation warnings.
+
+The dashboard supports dynamic infrastructure node creation by dragging technology stack icons directly onto the graph canvas.
 
 ## Tech Stack
 
@@ -117,12 +127,15 @@ ReactFlow changes are routed through Zustand:
 
 ### API Flow
 
-The app uses real API functions in `src/mocks/mock-api.ts`:
+The app keeps API access behind functions in `src/mocks/mock-api.ts`:
 
-```ts
-fetch("/api/apps")
-fetch(`/api/apps/${appId}/graph`)
-```
+- `getApps()`
+- `getAppGraph(appId)`
+
+TanStack Query in `AppLayout` consumes those functions:
+
+- `queryKey: ["apps"]`
+- `queryKey: ["graph", selectedAppId]`
 
 In development, `src/main.tsx` starts MSW before React renders:
 
@@ -133,15 +146,19 @@ if (import.meta.env.DEV) {
 }
 ```
 
-MSW handlers live in `src/mocks/handlers.ts`:
+Development behavior:
 
-- `GET /api/apps`
-- `GET /api/apps/:appId/graph`
+- `getApps()` calls `fetch("/api/apps")`.
+- `getAppGraph()` calls `fetch("/api/apps/:appId/graph")`.
+- MSW handlers in `src/mocks/handlers.ts` intercept those requests.
+- TanStack Query receives realistic async responses and caches them normally.
 
-TanStack Query in `AppLayout` consumes those API functions:
+Production behavior:
 
-- `queryKey: ["apps"]`
-- `queryKey: ["graph", selectedAppId]`
+- MSW is not started.
+- The app does not call `/api/...` routes.
+- `getApps()` and `getAppGraph()` return cloned local mock data through Promise-based functions with simulated latency.
+- The deployed Vercel build remains frontend-only and static-hosting compatible.
 
 Changing the selected app updates Zustand, which changes the graph query key and refetches the selected graph.
 
@@ -350,7 +367,8 @@ Each application has a realistic graph payload with service nodes, metrics, prov
 ## Interview Talking Points
 
 - The app separates **server state** and **client interaction state**: TanStack Query owns API fetching/caching, while Zustand owns graph interaction state.
-- MSW is used so the project still performs real browser `fetch()` requests without needing a backend server.
+- MSW is used in development so the project still performs real browser `fetch()` requests without needing a backend server.
+- Production uses local Promise-based mock services, so the deployed Vercel app does not depend on Service Worker APIs or API routes.
 - ReactFlow is controlled through Zustand, which makes inspector edits, drag/drop creation, edge changes, and deletion predictable.
 - The inspector is synchronized by storing only `selectedNodeId`, then deriving the active node from the graph state.
 - The dashboard supports dynamic infrastructure node creation by dragging technology stack icons directly onto the graph canvas.
@@ -362,9 +380,27 @@ Each application has a realistic graph payload with service nodes, metrics, prov
 
 More interview guidance is available in [docs/interview-preparation.md](docs/interview-preparation.md).
 
+## Engineering Highlights
+
+- **ReactFlow graph synchronization:** nodes and edges are controlled by Zustand, so dragging, connecting, editing, deleting, and app switching all update one shared graph state.
+- **Zustand global state architecture:** selected app, selected node, graph data, theme, sidebar state, and inspector tabs are centralized without Redux-style boilerplate.
+- **TanStack Query caching strategy:** app data and graph data are cached by stable query keys, including `["apps"]` and `["graph", selectedAppId]`.
+- **MSW integration:** development requests still use real `fetch()` calls, intercepted by MSW handlers for realistic API behavior.
+- **Production-safe API abstraction:** the same query functions return local mock data in production, keeping Vercel deployment static and backend-free.
+- **Drag-and-drop infrastructure builder:** stack icons generate editable infrastructure nodes directly on the ReactFlow canvas.
+- **Responsive dashboard system:** the layout supports desktop panels, collapsible navigation, and mobile inspector overlay behavior.
+- **Inspector synchronization:** the inspector derives selected node data from Zustand and updates the same node rendered in ReactFlow.
+- **ReactFlow optimization:** stable node types, stable edge options, memoized edge styling, and fit-view timing reduce unnecessary graph churn.
+
 ## Deployment
 
-This project is a Vite single-page application and can be deployed to platforms such as Vercel, Netlify, Render Static Sites, or GitHub Pages.
+The application is deployed on Vercel:
+
+https://app-graph-builder-one.vercel.app/
+
+This project is a Vite single-page application with a frontend-only architecture. It does not require a real backend server for the assignment scope.
+
+Development uses MSW to intercept browser `fetch()` requests and simulate backend APIs. Production uses local Promise-based mock services and static graph data, so the deployed build works on Vercel static hosting without Service Worker API dependency.
 
 Production build command:
 
@@ -383,9 +419,20 @@ For most hosting providers:
 - Build command: `npm run build`
 - Output directory: `dist`
 
-## Notes
+## Production Notes
 
-- The dashboard UI is frontend-only.
-- API responses are mocked with MSW in development.
-- Production builds compile normally, but MSW is not started outside development.
+- The assignment required a frontend-only implementation, so no backend server is used.
+- Development API behavior is simulated with MSW and real browser `fetch()` calls.
+- Production API behavior is simulated with local Promise-based mock services.
+- Realistic async behavior is preserved through small artificial delays.
+- Static deployment is optimized for Vercel and does not rely on runtime API routes.
 - The current implementation focuses on the frontend task scope: graph visualization, state management, mock API flow, dynamic infrastructure node creation, and polished dashboard interactions.
+
+## Future Improvements
+
+- Real backend API integration for applications, graphs, nodes, and mutations.
+- Live metrics from observability sources.
+- WebSocket updates for real-time graph and status changes.
+- Graph persistence for user-created nodes and edited service configuration.
+- Collaboration support for shared architecture editing.
+- Cloud provider API integrations for AWS, GCP, Azure, Kubernetes, and database services.

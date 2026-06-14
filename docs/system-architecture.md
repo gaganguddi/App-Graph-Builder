@@ -2,14 +2,14 @@
 
 This document explains how the Infrastructure Graph Dashboard works internally. It is written for recruiters, interviewers, reviewers, and developers who want to understand the actual implementation in this repository.
 
-The dashboard is a frontend-only React application that renders infrastructure graphs with ReactFlow, manages graph interaction state with Zustand, fetches mock API data through TanStack Query, and intercepts real browser `fetch()` requests with MSW in development.
+The dashboard is a frontend-only React application that renders infrastructure graphs with ReactFlow, manages graph interaction state with Zustand, and fetches mock application data through TanStack Query. In development, MSW intercepts real browser `fetch()` requests. In production, the same API functions return local Promise-based mock data so the Vercel deployment does not depend on Service Worker APIs or backend routes.
 
 ## High-Level Summary
 
 The project is organized around four major concerns:
 
-- **Server state:** TanStack Query fetches app and graph data through real `fetch()` calls.
-- **Mock API layer:** MSW intercepts `/api/apps` and `/api/apps/:appId/graph` in development.
+- **Server state:** TanStack Query owns app and graph loading, caching, retry, and refetch behavior.
+- **Mock API layer:** MSW intercepts `/api/apps` and `/api/apps/:appId/graph` in development; production uses local Promise-based mock services.
 - **Client interaction state:** Zustand stores selected app, selected node, graph nodes, graph edges, sidebar state, inspector tab state, and theme.
 - **Graph rendering:** ReactFlow renders controlled nodes and edges from Zustand and reports graph interactions back into the store.
 
@@ -20,83 +20,94 @@ flowchart TD
   User[User] --> UI[React UI]
 
   UI --> Layout[AppLayout]
-  Layout --> LeftRail[LeftRail Sidebar]
-  Layout --> Topbar[Topbar App Selector]
-  Layout --> GraphCanvas[ReactFlow GraphCanvas]
-  Layout --> RightPanel[Inspector / RightPanel]
-
-  Topbar --> Zustand[Zustand Store]
-  LeftRail --> Zustand
-  GraphCanvas --> Zustand
-  RightPanel --> Zustand
-
   Layout --> Query[TanStack Query]
-  Query --> Fetch[fetch API]
-  Fetch --> AppsAPI["/api/apps"]
-  Fetch --> GraphAPI["/api/apps/:appId/graph"]
+  Layout --> Store[Zustand Store]
+  Layout --> Canvas[ReactFlow Canvas]
+  Layout --> Inspector[Inspector Panel]
+  Layout --> Sidebar[Left Rail + Topbar]
 
-  AppsAPI --> MSW[MSW Worker]
-  GraphAPI --> MSW
+  Query --> API[getApps / getAppGraph]
+  API --> Env{Environment Check}
+  Env -->|Development| Fetch["fetch('/api/apps')"]
+  Fetch --> MSW[MSW Worker]
   MSW --> Handlers[Mock Handlers]
-  Handlers --> MockData[Mock Apps + Graph Payloads]
+  Handlers --> MockData[Static Mock Apps + Graphs]
+  Env -->|Production| LocalServices[Local Mock Services]
+  LocalServices --> MockData
   MockData --> Query
 
-  Query --> Zustand
-  Zustand --> GraphCanvas
-  GraphCanvas --> ServiceNode[ServiceNode Components]
-  GraphCanvas --> StackToolbar[Draggable Stack Toolbar]
-  Zustand --> RightPanel
+  Query --> Store
+  Sidebar --> Store
+  Canvas --> Store
+  Inspector --> Store
+  Store --> Canvas
+  Store --> Inspector
+
+  Canvas --> Nodes[ServiceNode Components]
+  Canvas --> Toolbar[Draggable Stack Toolbar]
 
   UI --> Theme[Theme System]
   Theme --> LocalStorage[localStorage]
-  Theme --> TailwindClasses[Theme-aware Tailwind Classes]
-
-  RightPanel --> ResponsiveDrawer[Mobile Inspector Overlay]
+  Theme --> Classes[Theme-aware Tailwind Classes]
 ```
 
 ## Application Start Flow
 
 1. Vite loads `src/main.tsx`.
 2. A TanStack Query `QueryClient` is created.
-3. In development, `enableMocking()` dynamically imports `src/mocks/browser.ts`.
-4. MSW starts before React renders.
-5. React renders `App` inside `QueryClientProvider`.
-6. `App` loads persisted theme from `localStorage`.
-7. `App` shows the premium splash screen briefly.
-8. `AppLayout` mounts.
-9. `AppLayout` runs the `["apps"]` query.
-10. `getApps()` calls `fetch("/api/apps")`.
-11. MSW intercepts the request and returns mock apps.
+3. `enableMocking()` checks `import.meta.env.DEV`.
+4. In development, `src/mocks/browser.ts` is dynamically imported and MSW starts before React renders.
+5. In production, MSW is skipped completely.
+6. React renders `App` inside `QueryClientProvider`.
+7. `App` loads persisted theme from `localStorage`.
+8. `App` shows the premium splash screen briefly.
+9. `AppLayout` mounts.
+10. `AppLayout` runs the `["apps"]` query.
+11. `getApps()` uses the environment-aware mock API strategy.
 12. If no app is selected, the first app becomes `selectedAppId` in Zustand.
 13. The graph query `["graph", selectedAppId]` becomes enabled.
-14. `getAppGraph()` calls `fetch("/api/apps/:appId/graph")`.
-15. MSW returns the graph payload.
-16. `setGraph()` stores nodes and edges in Zustand.
-17. `GraphCanvas` renders the ReactFlow graph.
-18. `RightPanel` stays closed until a node is selected.
+14. `getAppGraph()` uses the same environment-aware API layer.
+15. `setGraph()` stores nodes and edges in Zustand.
+16. `GraphCanvas` renders the ReactFlow graph.
+17. `RightPanel` stays closed until a node is selected.
 
 ```mermaid
 sequenceDiagram
   participant Browser
   participant Main as main.tsx
   participant MSW as MSW Worker
+  participant Local as Local Mock Services
   participant React as React App
   participant Query as TanStack Query
   participant Store as Zustand Store
   participant Flow as ReactFlow
 
   Browser->>Main: Load Vite entry
-  Main->>MSW: Start worker in DEV
-  MSW-->>Main: Worker ready
+  alt Development
+    Main->>MSW: Start worker
+    MSW-->>Main: Worker ready
+  else Production
+    Main->>Main: Skip MSW
+  end
   Main->>React: Render App
   React->>Query: useQuery(["apps"])
-  Query->>MSW: fetch("/api/apps")
-  MSW-->>Query: apps JSON
+  alt Development
+    Query->>MSW: fetch("/api/apps")
+    MSW-->>Query: apps JSON
+  else Production
+    Query->>Local: getApps()
+    Local-->>Query: cloned apps data
+  end
   Query-->>React: apps data
   React->>Store: setSelectedAppId(first app)
   React->>Query: useQuery(["graph", selectedAppId])
-  Query->>MSW: fetch("/api/apps/:appId/graph")
-  MSW-->>Query: graph JSON
+  alt Development
+    Query->>MSW: fetch("/api/apps/:appId/graph")
+    MSW-->>Query: graph JSON
+  else Production
+    Query->>Local: getAppGraph(appId)
+    Local-->>Query: cloned graph data
+  end
   React->>Store: setGraph(nodes, edges)
   Store-->>Flow: controlled nodes + edges
   Flow-->>Browser: Render graph
@@ -133,31 +144,75 @@ flowchart TD
 
 ## API Request Flow
 
-The project intentionally uses real `fetch()` calls. Mock data is not read directly by components. The app-facing API functions live in `src/mocks/mock-api.ts`, but they call network endpoints:
+The app-facing API functions live in `src/mocks/mock-api.ts`:
 
-- `fetch("/api/apps")`
-- `fetch("/api/apps/${appId}/graph")`
+- `getApps()`
+- `getAppGraph(appId)`
 
-In development, MSW intercepts those requests.
+Components do not import mock payloads directly. `AppLayout` uses TanStack Query, and TanStack Query calls these API functions. The functions decide whether to use MSW-backed `fetch()` in development or local Promise-based mock services in production.
 
 ```mermaid
 flowchart TD
   Component[AppLayout Component] --> UseQuery[useQuery]
   UseQuery --> QueryFn[getApps / getAppGraph]
-  QueryFn --> Fetch[Browser fetch]
-  Fetch --> Endpoint{Endpoint}
-  Endpoint --> Apps["GET /api/apps"]
-  Endpoint --> Graph["GET /api/apps/:appId/graph"]
-  Apps --> MSW[MSW Interception]
-  Graph --> MSW
+  QueryFn --> Env{import.meta.env.DEV}
+  Env -->|true| Fetch[Browser fetch]
+  Fetch --> Endpoint["/api/apps or /api/apps/:appId/graph"]
+  Endpoint --> MSW[MSW Interception]
   MSW --> Handlers[handlers.ts]
   Handlers --> Data[mockApps / mockGraphs]
-  Data --> JSON[JSON Response]
-  JSON --> Cache[TanStack Query Cache]
+  Env -->|false| Local[Local Promise Mock Services]
+  Local --> Data
+  Data --> Cache[TanStack Query Cache]
   Cache --> AppLayout[AppLayout]
   AppLayout --> Store[setGraph / setSelectedAppId]
   Store --> ReactFlow[ReactFlow Graph Update]
 ```
+
+## Environment-Based Data Flow
+
+The project has two data flows that share the same React and TanStack Query surface area.
+
+### Development Flow
+
+```mermaid
+flowchart TD
+  ReactApp[React App] --> Query[TanStack Query]
+  Query --> Fetch["fetch('/api/apps')"]
+  Fetch --> MSW[MSW intercepts request]
+  MSW --> Handlers[Mock handlers]
+  Handlers --> Data[Returns graph data]
+  Data --> Store[Zustand setGraph]
+  Store --> ReactFlow[ReactFlow updates]
+```
+
+Development intentionally uses browser `fetch()` requests so DevTools shows realistic API traffic and the app behaves like it is connected to backend endpoints.
+
+### Production Flow
+
+```mermaid
+flowchart TD
+  ReactApp[React App] --> Query[TanStack Query]
+  Query --> LocalLayer[Local mock service layer]
+  LocalLayer --> StaticData[Static graph data]
+  StaticData --> Store[Zustand setGraph]
+  Store --> ReactFlow[ReactFlow updates]
+```
+
+Production avoids `/api/...` routes and does not start MSW. The local mock service layer returns cloned mock data with simulated latency, preserving the same async query behavior while keeping the Vercel deployment static-hosting friendly.
+
+## Mock API Strategy
+
+MSW is used in development because it gives the frontend realistic API behavior without requiring a backend server. The app still calls `fetch("/api/apps")` and `fetch("/api/apps/:appId/graph")`, and the handlers in `src/mocks/handlers.ts` return mock application and graph payloads.
+
+The production fallback exists because a static Vercel deployment should not depend on Service Worker APIs or missing API routes. In production, `getApps()` and `getAppGraph()` return data directly from `mockApps` and `mockGraphs` through Promise-based functions. The graph payload is cloned before being returned so ReactFlow and Zustand can safely mutate graph state without altering the original mock fixtures.
+
+This environment-aware architecture keeps caching consistent. TanStack Query always calls the same functions and uses the same query keys:
+
+- `["apps"]`
+- `["graph", selectedAppId]`
+
+Only the implementation behind those functions changes by environment. That keeps the frontend-first workflow easy to replace with real backend endpoints later while remaining deployment-safe today.
 
 ## MSW Mock API Interception
 
@@ -286,7 +341,7 @@ sequenceDiagram
   participant Topbar
   participant Store as Zustand Store
   participant Query as TanStack Query
-  participant MSW
+  participant API as Mock API Layer
   participant Graph as ReactFlow
   participant Inspector
 
@@ -294,8 +349,8 @@ sequenceDiagram
   Topbar->>Store: setSelectedAppId(app.id)
   Store->>Store: selectedNodeId = null
   Store-->>Query: selectedAppId changes query key
-  Query->>MSW: fetch("/api/apps/:appId/graph")
-  MSW-->>Query: graph payload
+  Query->>API: getAppGraph(appId)
+  API-->>Query: graph payload
   Query-->>Store: setGraph(graph)
   Store-->>Graph: new nodes + edges
   Store-->>Inspector: selectedNodeId cleared
@@ -460,8 +515,43 @@ The implementation includes several practical performance decisions:
 - **TanStack Query caching:** app and graph responses are cached by query key.
 - **Controlled graph state:** ReactFlow changes are applied through Zustand actions instead of scattered local state.
 - **Fit view timing:** `ResizeAwareCanvas` uses requestAnimationFrame and timeout after sidebar transitions to avoid abrupt graph framing.
-- **MSW in development only:** production builds are not blocked by the mock worker.
+- **MSW in development only:** production builds are not blocked by the mock worker or missing API routes.
+- **Production mock fallback:** production data comes from local Promise-based services, preserving async behavior without Service Worker dependency.
 - **CSS transitions:** visual polish uses Tailwind/CSS transitions instead of heavy runtime animation dependencies.
+
+## Deployment Architecture
+
+The app is deployed on Vercel as a static Vite single-page application:
+
+https://app-graph-builder-one.vercel.app/
+
+The deployment has no runtime backend dependency. Vercel serves the compiled files from `dist`, and the production bundle uses local mock services for application and graph data.
+
+```mermaid
+flowchart TD
+  Vercel[Vercel Static Hosting] --> Bundle[Production Vite Bundle]
+  Bundle --> React[React App]
+  React --> Query[TanStack Query]
+  Query --> LocalServices[Local Promise Mock Services]
+  LocalServices --> MockData[Static Mock Graph Data]
+  MockData --> Store[Zustand Store]
+  Store --> Canvas[ReactFlow Canvas]
+```
+
+Development and production are intentionally different at the data transport layer:
+
+- Development uses MSW to intercept `fetch()` requests and simulate backend endpoints.
+- Production uses local mock services so the app works without Service Worker registration or API routes.
+- TanStack Query, Zustand, ReactFlow, app switching, and inspector behavior remain the same in both environments.
+
+## Architecture Benefits
+
+- **Scalable frontend architecture:** API loading, graph interaction state, visual graph rendering, and inspector editing are separated into clear ownership boundaries.
+- **Realistic API simulation:** development uses MSW and real `fetch()` calls, making the app easy to explain and easy to migrate to a backend.
+- **Deployment-safe mocking:** production avoids network calls to missing `/api/...` routes and avoids Service Worker dependency.
+- **Predictable graph state management:** Zustand centralizes graph mutations, node selection, app switching, inspector edits, and edge cleanup.
+- **Responsive UX architecture:** sidebar and inspector behavior respond to viewport size while keeping ReactFlow framed with fit-view timing.
+- **ReactFlow optimization strategy:** stable config objects and memoized edge styling reduce unnecessary graph rerenders and warning noise.
 
 ## How to Explain the Architecture in Interviews
 
@@ -491,12 +581,12 @@ This keeps API data concerns separate from local graph interaction state.
 
 ### Why MSW?
 
-MSW allows the frontend to make real browser `fetch()` requests while still using mock data. This means DevTools shows realistic Fetch/XHR traffic:
+MSW allows the frontend to make real browser `fetch()` requests in development while still using mock data. This means DevTools shows realistic Fetch/XHR traffic:
 
 - `/api/apps`
 - `/api/apps/:appId/graph`
 
-It also makes the app easier to replace with a real backend later because components already use API calls.
+It also makes the app easier to replace with a real backend later because components already use API functions. Production uses local Promise-based mock services behind the same functions so the deployed Vercel app stays backend-free and Service Worker independent.
 
 ### Why ReactFlow?
 
@@ -534,7 +624,8 @@ The dashboard keeps responsibilities separated:
 - `StackToolbar` owns drag sources.
 - `RightPanel` owns selected-node editing.
 - Zustand owns graph mutations.
-- MSW owns mock API responses.
+- MSW owns development mock API responses.
+- Local mock services own production fallback responses.
 
 This separation makes the project easier to evaluate, maintain, and extend.
 
@@ -542,10 +633,13 @@ This separation makes the project easier to evaluate, maintain, and extend.
 
 ```mermaid
 flowchart LR
-  Start[App Starts] --> MSW[MSW Starts in DEV]
-  MSW --> Apps[Fetch Apps]
+  Start[App Starts] --> Env{Environment}
+  Env -->|Development| MSW[MSW Starts]
+  Env -->|Production| Local[Local Mock Services]
+  MSW --> Apps[Load Apps]
+  Local --> Apps
   Apps --> SelectApp[Select Initial App]
-  SelectApp --> GraphFetch[Fetch Graph]
+  SelectApp --> GraphFetch[Load Graph]
   GraphFetch --> Store[Store Nodes/Edges in Zustand]
   Store --> Render[ReactFlow Renders Graph]
   Render --> Interact[User Interacts]
@@ -567,8 +661,9 @@ This architecture intentionally separates API data, graph interaction state, and
 
 - TanStack Query handles API lifecycle.
 - MSW provides realistic development API responses.
+- Local Promise-based mock services provide production-safe data for Vercel.
 - Zustand controls graph interaction state.
 - ReactFlow renders and updates the graph.
 - The inspector, sidebar, topbar, and stack toolbar consume the same store-driven graph state.
 
-That structure makes the dashboard feel interactive and production-like while remaining easy to explain in an interview.
+That structure makes the dashboard feel interactive and production-like while remaining easy to explain in an interview and safe to deploy as a static frontend.
