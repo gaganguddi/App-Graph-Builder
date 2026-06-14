@@ -285,22 +285,44 @@ export const cloneGraph = (graph: GraphPayload): GraphPayload => ({
   edges: graph.edges.map((edge) => ({ ...edge })),
 });
 
-export async function getApps(): Promise<{ apps: AppSummary[] }> {
-  const response = await fetch("/api/apps");
+const wait = (ms: number) => new Promise((resolve) => window.setTimeout(resolve, ms));
 
-  if (!response.ok) {
-    throw new Error("Unable to load applications.");
+export async function getApps(): Promise<{ apps: AppSummary[] }> {
+  if (import.meta.env.DEV) {
+    const response = await fetch("/api/apps");
+
+    if (!response.ok) {
+      throw new Error("Unable to load applications.");
+    }
+
+    return response.json() as Promise<{ apps: AppSummary[] }>;
   }
 
-  return response.json() as Promise<{ apps: AppSummary[] }>;
+  await wait(420);
+
+  return {
+    apps: mockApps.map((app) => ({ ...app })),
+  };
 }
 
 export async function getAppGraph(appId: string): Promise<GraphPayload> {
-  const response = await fetch(`/api/apps/${appId}/graph`);
+  if (import.meta.env.DEV) {
+    const response = await fetch(`/api/apps/${appId}/graph`);
 
-  if (!response.ok) {
+    if (!response.ok) {
+      throw new Error("Application graph was not found.");
+    }
+
+    return response.json() as Promise<GraphPayload>;
+  }
+
+  await wait(520);
+
+  const graph = mockGraphs[appId];
+
+  if (!graph) {
     throw new Error("Application graph was not found.");
   }
 
-  return response.json() as Promise<GraphPayload>;
+  return cloneGraph(graph);
 }
